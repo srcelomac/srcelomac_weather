@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Погода</title>
+</head>
+<body>
+    <h1>Узнать погоду</h1>
+    <form method="POST">
+        <label for="start_city">Начальный город:</label>
+        <input type="text" id="start_city" name="start_city" required>
+        <br><br>
+        <label for="end_city">Конечный город:</label>
+        <input type="text" id="end_city" name="end_city" required>
+        <br><br>
+        <button type="submit">Определить погоду</button>
+    </form>
+    <br>
+    {% if result %}
+    <div>
+        <h2>Результат:</h2>
+        <pre>{{ result }}</pre>
+    </div>
+    {% endif %}
+</body>
+</html>

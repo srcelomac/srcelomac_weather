@@ -40,20 +40,6 @@ class Location:
                 return None, None
         return None, None
 
-        '''
-        if data:
-            try:
-                coordinates = data['response']['GeoObjectCollection']['featureMember'][0]['GeoObject']['Point']['pos']
-                lon, lat = coordinates.split(' ')
-                return str(lon), str(lat)
-            except KeyError as e:
-                print(f"KeyError: {e} - Возможно, отсутствует один из необходимых ключей.")
-            except Exception as e:
-                print(f"Произошла ошибка: {e}")
-
-        return None, None
-        '''
-
 
     def get_location_key(self, city: str):
         lon, lat = self.get_coordinates(city)
@@ -72,24 +58,6 @@ class Location:
         else:
             return "Не удалось получить координаты для указанного города."
 
-    '''
-    def get_location_key(self, address):
-        url = "http://dataservice.accuweather.com/locations/v1/cities/search"
-        params = {
-            "apikey": accuweather_api_key,
-            "q": address
-        }
-        response = requests.get(url, params=params)
-        if response.status_code == 200:
-            data = response.json()
-            if data:
-                return data[0]['Key']
-            else:
-                print("Местоположение не найдено.")
-        else:
-            print(f"Ошибка API: {response.status_code}")
-        return None
-    '''
 
 import requests
 
@@ -119,7 +87,7 @@ class Weather:
                 self.weather['temperature'] = data[0]['Temperature']['Metric']['Value']
                 self.weather['humidity'] = data[0]['RelativeHumidity']
                 self.weather['wind_speed'] = data[0]['Wind']['Speed']['Metric']['Value']
-                return f"Город: {city} \n Погода: \n   - Температура: {self.weather['temperature']}°C \n   - Влажность: {self.weather['humidity']}% \n   - Скорость ветра: {self.weather['wind_speed']} м/с \n   - Шанс дождя: {self.weather['wind_speed']} м/с"
+                return f"Город: {city} \n Погода: \n   - Температура: {self.weather['temperature']}°C \n   - Влажность: {self.weather['humidity']}% \n   - Скорость ветра: {self.weather['wind_speed']} м/с"
                 #return data
             except KeyError as e:
                 return f"KeyError: {e} - Некорректный формат данных."
