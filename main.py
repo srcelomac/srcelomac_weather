@@ -5,9 +5,6 @@ import requests
 accuweather_api_key = os.environ["ACCUWEATHER_API_KEY"]
 yandex_api_key = os.environ["YANDEX_API_KEY"]
 
-print(accuweather_api_key)
-print(yandex_api_key)
-
 
 class Location:
     def __init__(self, accuweather_api_key, yandex_api_key):
@@ -94,6 +91,45 @@ class Location:
         return None
     '''
 
+import requests
+
+class Weather:
+    def __init__(self, accuweather_api_key):
+        self.accuweather_key = accuweather_api_key
+        self.weather = {}
+
+    def get_weather(self, city: str, location: Location):
+        location_key = location.get_location_key(city)
+
+        if not location_key:
+            return f"Не удалось получить location_key: {location_key}"
+
+        params = {
+            "apikey": self.accuweather_key,
+            "details": "true"
+        }
+        response = requests.get(f"http://dataservice.accuweather.com/currentconditions/v1/{location_key}", params=params)
+
+        if response.status_code != 200 and response.status_code != 201:
+            return f"Ошибка при получении данных о погоде. Код ошибки: {response.status_code}"
+
+        data = response.json()
+        if data:
+            try:
+                self.weather['temperature'] = data[0]['Temperature']['Metric']['Value']
+                self.weather['humidity'] = data[0]['RelativeHumidity']
+                self.weather['wind_speed'] = data[0]['Wind']['Speed']['Metric']['Value']
+                return f"Город: {city} \n Погода: \n   - Температура: {self.weather['temperature']}°C \n   - Влажность: {self.weather['humidity']}% \n   - Скорость ветра: {self.weather['wind_speed']} м/с"
+            except KeyError as e:
+                return f"KeyError: {e} - Некорректный формат данных."
+            except Exception as e:
+                return f"Произошла ошибка: {e}"
+        return "Данные о погоде отсутствуют."
+
 location = Location(accuweather_api_key=accuweather_api_key, yandex_api_key=yandex_api_key)
-location_key = location.get_location_key('Москва')
-print(location_key)
+weather = Weather(accuweather_api_key=accuweather_api_key)
+
+city = "Москва"
+current_weather = weather.get_weather(city, location)
+#location_key = location.get_location_key(city)
+print(current_weather)
