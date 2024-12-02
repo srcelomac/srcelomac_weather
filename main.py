@@ -98,7 +98,7 @@ class Weather:
         self.accuweather_key = accuweather_api_key
         self.weather = {}
 
-    def get_weather(self, city: str, location: Location):
+    def get_current_weather(self, city: str, location: Location):
         location_key = location.get_location_key(city)
 
         if not location_key:
@@ -119,17 +119,55 @@ class Weather:
                 self.weather['temperature'] = data[0]['Temperature']['Metric']['Value']
                 self.weather['humidity'] = data[0]['RelativeHumidity']
                 self.weather['wind_speed'] = data[0]['Wind']['Speed']['Metric']['Value']
-                return f"Город: {city} \n Погода: \n   - Температура: {self.weather['temperature']}°C \n   - Влажность: {self.weather['humidity']}% \n   - Скорость ветра: {self.weather['wind_speed']} м/с"
+                return f"Город: {city} \n Погода: \n   - Температура: {self.weather['temperature']}°C \n   - Влажность: {self.weather['humidity']}% \n   - Скорость ветра: {self.weather['wind_speed']} м/с \n   - Шанс дождя: {self.weather['wind_speed']} м/с"
+                #return data
             except KeyError as e:
                 return f"KeyError: {e} - Некорректный формат данных."
             except Exception as e:
                 return f"Произошла ошибка: {e}"
         return "Данные о погоде отсутствуют."
 
-location = Location(accuweather_api_key=accuweather_api_key, yandex_api_key=yandex_api_key)
-weather = Weather(accuweather_api_key=accuweather_api_key)
+    def get_forecast(self, city: str, location: Location):
+        location_key = location.get_location_key(city)
 
-city = "Москва"
-current_weather = weather.get_weather(city, location)
-#location_key = location.get_location_key(city)
-print(current_weather)
+        params = {
+            'apikey': self.accuweather_key,
+            'language': 'ru',
+            'details': 'true',
+            'metric': 'true'
+        }
+        response = requests.get(f"http://dataservice.accuweather.com/forecasts/v1/daily/1day/{location_key}", params=params)
+
+        data = response.json()
+        if data:
+            self.weather['precipitation_prob'] = data['DailyForecasts'][0]['Day']['PrecipitationProbability']
+            return f"   - Шанс дождя: {self.weather['precipitation_prob']}%"
+            #return data
+        else:
+            return "Не получилось получить данные о погоде"
+
+    def get_weather(self, city: str, location: Location):
+        current_weather = self.get_current_weather(city, location)
+        forecast = self.get_forecast(city, location)
+
+        # Возвращаем все данные о текущей погоде и прогнозе
+        return f"{current_weather}\n{forecast}"
+
+    def check_bad_weather(self):
+        weather = self.weather
+        estimation = []
+
+        if weather['temperature'] < 0 or weather['temperature'] > 35:
+            estimation.append("Температура не в норме")
+        if weather['wind_speed'] > 50:
+            estimation.append("Порывы сильного ветра")
+        if weather['precipitation_prob'] > 70:
+            estimation.append("Высокая вероятность выпадения осадков")
+
+        if estimation:
+            answer = "Неблагоприятная погода: \n"
+            for note in estimation:
+                answer = answer + '   - ' + note + '\n'
+            return answer
+        else:
+            return "Погодные условия благоприятны"
