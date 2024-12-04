@@ -5,6 +5,8 @@ import requests
 accuweather_api_key = os.environ["ACCUWEATHER_API_KEY"]
 yandex_api_key = os.environ["YANDEX_API_KEY"]
 
+class APIQuotaExceededError(Exception):
+    pass
 
 class Location:
     def __init__(self, accuweather_api_key, yandex_api_key):
@@ -23,7 +25,7 @@ class Location:
 
         if response.status_code != 200:
             print(f'Ошибка при получении данных. Код ошибки: {response.status_code}')
-            return  None
+            return (f'Ошибка при получении данных. Код ошибки: {response.status_code}')
 
         return response.json()
 
@@ -50,8 +52,11 @@ class Location:
             }
             response = requests.get('http://dataservice.accuweather.com/locations/v1/cities/geoposition/search', params=params)
 
+            if response.status_code == 503 or 'ServiceUnavailable' in response.json().get('Code', ''):
+                raise APIQuotaExceededError("Запросы к API закончились")
+
             if response.status_code != 200 and response.status_code != 201:
-                print('Ошибка при получении данных:', response.json())
+                print('Ошибка при получении данных svg:', response.json())
                 return f'Ошибка при получении данных. Код ошибки: {response.status_code}'
 
             return response.json()['Key']
@@ -115,10 +120,12 @@ class Weather:
             return "Не получилось получить данные о погоде"
 
     def get_weather(self, city: str, location: Location):
-        current_weather = self.get_current_weather(city, location)
-        forecast = self.get_forecast(city, location)
+        try:
+            current_weather = self.get_current_weather(city, location)
+            forecast = self.get_forecast(city, location)
+        except APIQuotaExceededError:
+            raise APIQuotaExceededError("Запросы к API закончились")
 
-        # Возвращаем все данные о текущей погоде и прогнозе
         return f"{current_weather}\n{forecast}"
 
     def check_bad_weather(self):

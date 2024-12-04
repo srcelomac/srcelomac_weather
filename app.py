@@ -1,7 +1,7 @@
 from turtledemo.penrose import start
 
 from flask import Flask, render_template, request
-from main import Location, Weather
+from main import Location, Weather, APIQuotaExceededError
 import os
 
 app = Flask(__name__)
@@ -24,19 +24,22 @@ def index():
         start_city = request.form.get("start_city")
         end_city = request.form.get("end_city")
 
-        start_weather = weather.get_weather(start_city, location)
-        start_estimate = weather.check_bad_weather()
+        try:
+            start_weather = weather.get_weather(start_city, location)
+            start_estimate = weather.check_bad_weather()
 
-        end_weather = weather.get_weather(end_city, location)
-        end_estimate = weather.check_bad_weather()
+            end_weather = weather.get_weather(end_city, location)
+            end_estimate = weather.check_bad_weather()
 
-        #result = f"Погода в городе {start_city}:\n{start_weather}\nОценка: {start_estimate}\n\nПогода в {end_city}:\n{end_weather}\nОценка: {end_estimate}"
-        result_1 = f"Погода в городе {start_city}:\n{start_weather}\nОценка: {start_estimate}"
-        result_2 = f"Погода в городе {end_city}:\n{end_weather}\nОценка: {end_estimate}"
-        if (len(start_estimate) == 0) and (len(end_estimate) == 0):
-            result_3 = "Погодный условия благоприятны! Доброй дороги!"
-        else:
-            result_3 = "Погодный условия не благоприятны! Мы не советуем Вас сейчас отправляться в это путешествие :("
+            #result = f"Погода в городе {start_city}:\n{start_weather}\nОценка: {start_estimate}\n\nПогода в {end_city}:\n{end_weather}\nОценка: {end_estimate}"
+            result_1 = f"Погода в городе {start_city}:\n{start_weather}\nОценка: {start_estimate}"
+            result_2 = f"Погода в городе {end_city}:\n{end_weather}\nОценка: {end_estimate}"
+            if (len(start_estimate) == 0) and (len(end_estimate) == 0):
+                result_3 = "Погодный условия благоприятны! Доброй дороги!"
+            else:
+                result_3 = "Погодный условия не благоприятны! Мы не советуем Вас сейчас отправляться в это путешествие :("
+        except APIQuotaExceededError:
+            return render_template("ErrorAPI.html")
     return render_template("index.html", city_1=start_city, result_1=result_1, city_2=end_city, result_2=result_2, result_3=result_3)
 
 if __name__ == "__main__":
