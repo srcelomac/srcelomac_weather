@@ -87,7 +87,7 @@ class Weather:
                 self.weather['temperature'] = data[0]['Temperature']['Metric']['Value']
                 self.weather['humidity'] = data[0]['RelativeHumidity']
                 self.weather['wind_speed'] = data[0]['Wind']['Speed']['Metric']['Value']
-                return f"Город: {city} \n Погода: \n   - Температура: {self.weather['temperature']}°C \n   - Влажность: {self.weather['humidity']}% \n   - Скорость ветра: {self.weather['wind_speed']} м/с"
+                return f"   - Температура: {self.weather['temperature']}°C \n   - Влажность: {self.weather['humidity']}% \n   - Скорость ветра: {self.weather['wind_speed']} м/с"
                 #return data
             except KeyError as e:
                 return f"KeyError: {e} - Некорректный формат данных."
