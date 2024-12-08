@@ -5,6 +5,8 @@ import requests
 accuweather_api_key = os.environ["ACCUWEATHER_API_KEY"]
 yandex_api_key = os.environ["YANDEX_API_KEY"]
 
+find_city = ''
+
 class APIQuotaExceededError(Exception):
     pass
 
@@ -34,10 +36,12 @@ class Location:
 
 
     def get_coordinates(self, city: str):
+        global find_city
         data = self.request_to_yandex(city)
         if data:
             try:
                 coords = data['response']['GeoObjectCollection']['featureMember'][0]['GeoObject']['Point']['pos']
+                find_city = data['response']['GeoObjectCollection']['featureMember'][0]['GeoObject']['name']
                 lon, lat = coords.split(' ')
                 return str(lon), str(lat)
             except Exception as e:
@@ -55,6 +59,7 @@ class Location:
             response = requests.get('http://dataservice.accuweather.com/locations/v1/cities/geoposition/search', params=params)
 
             if response.status_code == 503 or 'ServiceUnavailable' in response.json().get('Code', ''):
+                print("APIQuotaExceededError вызывается")
                 raise APIQuotaExceededError("Запросы к API закончились")
 
             if response.status_code != 200 and response.status_code != 201:
@@ -62,13 +67,14 @@ class Location:
                 return f'Ошибка при получении данных. Код ошибки: {response.status_code}'
 
             return response.json()['Key']
+        except APIQuotaExceededError as e:
+            print(f"Обработка APIQuotaExceededError: {e}")
+            raise
         except KeyError as e:
             raise Exception(f"Ошибка получения ключа локации: {e}")
         except Exception as e:
             raise Exception(f"Ошибка запроса к API AccuWeather: {e}")
 
-
-import requests
 
 class Weather:
     def __init__(self, accuweather_api_key):
@@ -97,6 +103,9 @@ class Weather:
             self.weather['wind_speed'] = data[0]['Wind']['Speed']['Metric']['Value']
             return f"   - Температура: {self.weather['temperature']}°C \n   - Влажность: {self.weather['humidity']}% \n   - Скорость ветра: {self.weather['wind_speed']} м/с"
             #return data
+        except APIQuotaExceededError as e:
+            print(f"Ошибка квоты API: {e}")
+            raise
         except Exception as e:
             raise Exception(f"Ошибка получения данных текущей погоды: {e}")
 
@@ -124,15 +133,17 @@ class Weather:
             raise Exception(f"Ошибка получения данных прогноза погоды: {e}")
 
     def get_weather(self, city: str, location: Location):
+        global find_city
         try:
             current_weather = self.get_current_weather(city, location)
             forecast = self.get_forecast(city, location)
-        except APIQuotaExceededError:
-            raise APIQuotaExceededError("Запросы к API закончились")
+        except APIQuotaExceededError as e:
+            print(f"Обработка APIQuotaExceededError: {e}")
+            raise
         except Exception as e:
             raise Exception(f"Ошибка получения данных текущей погоды и прогноза: {e}")
 
-        return f"{current_weather}\n{forecast}"
+        return find_city, f"{current_weather}\n{forecast}"
 
     def check_bad_weather(self):
         try:

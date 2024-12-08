@@ -23,15 +23,15 @@ def index():
         end_city = request.form.get("end_city")
 
         try:
-            start_weather = weather.get_weather(start_city, location)
+            find_start_city, start_weather = weather.get_weather(start_city, location)
             start_estimate = weather.check_bad_weather()
 
-            end_weather = weather.get_weather(end_city, location)
+            find_end_city, end_weather = weather.get_weather(end_city, location)
             end_estimate = weather.check_bad_weather()
 
             #result = f"Погода в городе {start_city}:\n{start_weather}\nОценка: {start_estimate}\n\nПогода в {end_city}:\n{end_weather}\nОценка: {end_estimate}"
-            result_1 = f"Погода в городе {start_city}:\n{start_weather}\nОценка: {start_estimate}"
-            result_2 = f"Погода в городе {end_city}:\n{end_weather}\nОценка: {end_estimate}"
+            result_1 = f"Погода в городе {find_start_city}:\n{start_weather}\nОценка: {start_estimate}"
+            result_2 = f"Погода в городе {find_end_city}:\n{end_weather}\nОценка: {end_estimate}"
             if (len(start_estimate) == 0) and (len(end_estimate) == 0):
                 result_3 = "Погодный условия благоприятны! Доброй дороги!"
             else:
