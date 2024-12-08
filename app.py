@@ -1,5 +1,3 @@
-from turtledemo.penrose import start
-
 from flask import Flask, render_template, request
 from main import Location, Weather, APIQuotaExceededError
 import os
@@ -40,6 +38,9 @@ def index():
                 result_3 = "Погодный условия не благоприятны! Мы не советуем Вас сейчас отправляться в это путешествие :("
         except APIQuotaExceededError:
             return render_template("ErrorAPI.html")
+        except Exception as e:
+            print(f"Произошла ошибка: {e}")
+            return render_template("Error.html")
     return render_template("index.html", city_1=start_city, result_1=result_1, city_2=end_city, result_2=result_2, result_3=result_3)
 
 if __name__ == "__main__":
