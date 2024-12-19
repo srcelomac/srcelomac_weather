@@ -2,7 +2,7 @@ import os
 import flask
 import requests
 
-accuweather_api_key = os.environ["ACCUWEATHER_API_KEY_8"]
+accuweather_api_key = os.environ["ACCUWEATHER_API_KEY_9"]
 yandex_api_key = os.environ["YANDEX_API_KEY"]
 
 find_city = ''
@@ -88,20 +88,12 @@ class Weather:
         self.accuweather_key = accuweather_api_key
         self.weather = {}
 
-    def get_forecast_data(self, location_key, days=1):
+    def get_forecast_data(self, location_key, days=5):
         try:
             if days == 1:
                 forecast_url = (
                     f"http://dataservice.accuweather.com/forecasts/v1/daily/1day/{location_key}"
                 )
-            elif days == 5:
-                forecast_url = (
-                    f"http://dataservice.accuweather.com/forecasts/v1/daily/5day/{location_key}"
-                )
-            elif days == 10:
-                forecast_url = f"http://dataservice.accuweather.com/forecasts/v1/daily/10day/{location_key}"
-            elif days == 15:
-                forecast_url = f"http://dataservice.accuweather.com/forecasts/v1/daily/15day/{location_key}"
             else:
                 forecast_url = (
                     f"http://dataservice.accuweather.com/forecasts/v1/daily/5day/{location_key}"

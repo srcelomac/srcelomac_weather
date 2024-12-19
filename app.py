@@ -5,10 +5,12 @@ from dash import Dash, html, dcc, Input, Output, State, ALL
 import plotly.graph_objects as go
 import pandas as pd
 import logging
+from dash import dash_table
+from dash.dash_table.Format import Group
 
 app = Dash(__name__)
 
-ACCUWEATHER_API_KEY = os.environ["ACCUWEATHER_API_KEY_8"]
+ACCUWEATHER_API_KEY = os.environ["ACCUWEATHER_API_KEY_9"]
 YANDEX_API_KEY = os.environ["YANDEX_API_KEY"]
 
 location = Location(accuweather_api_key=ACCUWEATHER_API_KEY, yandex_api_key=YANDEX_API_KEY)
@@ -40,9 +42,10 @@ app.layout = html.Div(
                     id="forecast-days",
                     options=[
                         {"label": "1 день", "value": 1},
+                        {"label": "2 дня", "value": 2},
+                        {"label": "3 дня", "value": 3},
+                        {"label": "4 дня", "value": 4},
                         {"label": "5 дней", "value": 5},
-                        {"label": "10 дней", "value": 10},
-                        {"label": "15 дней", "value": 15},
                     ],
                     value=1,
                 ),
@@ -156,7 +159,9 @@ def update_output(n_clicks, cities, forecast_days):
                     max_temps = []
                     wind_speeds = []
                     precipitation_probs = []
-                    for day in forecast["DailyForecasts"]:
+                    for cnt, day in enumerate(forecast["DailyForecasts"]):
+                        if (cnt >= forecast_days):
+                            break
                         dates.append(day["Date"][:10])
                         min_temps.append(day["Temperature"]["Minimum"]["Value"])
                         max_temps.append(day["Temperature"]["Maximum"]["Value"])
@@ -193,11 +198,42 @@ def update_output(n_clicks, cities, forecast_days):
                     )
                     precip_fig = go.Figure(data=[precipitation_prob_trace], layout=precipitation_prob_layout)
                     output_children.append(dcc.Graph(figure=precip_fig))
+
+                table_data = []
+                for city, data in weather_data.items():
+                    forecast = data["forecast"]
+                    for cnt, day in enumerate(forecast["DailyForecasts"]):
+                        if (cnt >= forecast_days):
+                            break
+                        table_data.append({
+                            "Город": city,
+                            "Дата": day["Date"][:10],
+                            "Мин. температура (°C)": day["Temperature"]["Minimum"]["Value"],
+                            "Макс. температура (°C)": day["Temperature"]["Maximum"]["Value"],
+                            "Скорость ветра (км/ч)": day["Day"]["Wind"]["Speed"]["Value"],
+                            "Вероятность осадков (%)": day["Day"]["PrecipitationProbability"]
+                        })
+
+                table = dash_table.DataTable(
+                    id='weather-table',
+                    columns=[
+                        {"name": "Город", "id": "Город"},
+                        {"name": "Дата", "id": "Дата"},
+                        {"name": "Мин. температура (°C)", "id": "Мин. температура (°C)"},
+                        {"name": "Макс. температура (°C)", "id": "Макс. температура (°C)"},
+                        {"name": "Скорость ветра (км/ч)", "id": "Скорость ветра (км/ч)"},
+                        {"name": "Вероятность осадков (%)", "id": "Вероятность осадков (%)"},
+                    ],
+                    data=table_data,
+                    style_table={'height': '400px', 'overflowY': 'auto'},
+                    style_cell={'textAlign': 'center', 'padding': '5px'},
+                    style_header={'fontWeight': 'bold', 'textAlign': 'center'},
+                )
+
+                output_children.append(table)
+
             except Exception as e:
                 print(f'Ошибка: {str(e)}')
-                if (str(e) == 'DailyForecasts'):
-                    logging.error(f"Лимит запросов к API исчерпан: {str(e)}")
-                    return html.Div("Лимит запросов к API исчерпан. Пожалуйста, попробуйте позже.", style={"color": "red"})
                 logging.error(f"Ошибка при создании графиков: {str(e)}")
                 return html.Div(f"Произошла ошибка: {str(e)}. Пожалуйста, попробуйте еще раз.", style={"color": "red"})
 
