@@ -4,6 +4,7 @@ import os
 from dash import Dash, html, dcc, Input, Output, State, ALL
 import plotly.graph_objects as go
 import pandas as pd
+import logging
 
 app = Dash(__name__)
 
@@ -59,15 +60,19 @@ app.layout = html.Div(
     State("city-input-container", "children"),
 )
 def city_inputs(n_clicks, children):
-    """функция для динамического добавления полей ввода городов"""
-    new_children = children.copy()
-    new_input = dcc.Input(
-        id={"type": "city-input", "index": n_clicks},
-        type="text",
-        placeholder=f"Город №{n_clicks+2}",
-    )
-    new_children.append(new_input)
-    return new_children
+    try:
+        new_children = children.copy()
+        new_input = dcc.Input(
+            id={"type": "city-input", "index": n_clicks},
+            type="text",
+            placeholder=f"Город №{n_clicks + 2}",
+        )
+        new_children.append(new_input)
+        return new_children
+    except Exception as e:
+        logging.error(f"Ошибка при добавлении города: {str(e)}")
+        return children
+
 
 
 @app.callback(
@@ -77,114 +82,131 @@ def city_inputs(n_clicks, children):
     State("forecast-days", "value"),
 )
 def update_output(n_clicks, cities, forecast_days):
-    """функция для обработки данных и генерации выходных данных"""
-    if n_clicks > 0:
-        all_cities = [city for city in cities if city]
-        if not all_cities:
-            return html.Div("Пожалуйста, введите хотя бы один город.")
+    try:
+        if n_clicks > 0:
+            all_cities = [city for city in cities if city]
+            if not all_cities:
+                return html.Div("Должен быть введен хотя бы один город")
+            if any(any(char.isdigit() for char in element) for element in all_cities):
+                return html.Div("В названии городов не должны присутстовать цифры")
 
-        weather_data = {}
-        city_coordinates = []
-        errors = []
-        for city in all_cities:
-            lat, lon = location.get_coordinates(city)
-            location_key = location.get_location_key(lat, lon)
-            if not location_key:
-                errors.append(f"Не удалось найти город <<{city}>>")
-                continue
-            forecast = weather.get_forecast_data(location_key, days=forecast_days)
-            if not forecast:
-                errors.append(f"Не удалось получить прогноз для города <<{city}>>")
-                continue
-            weather_data[city] = {
-                "forecast": forecast,
-                "latitude": lat,
-                "longitude": lon,
-            }
-            city_coordinates.append({"city": city, "lat": lat, "lon": lon})
+            weather_data = {}
+            city_coordinates = []
+            errors = []
+            for city in all_cities:
+                try:
+                    lat, lon = location.get_coordinates(city)
+                    location_key = location.get_location_key(lat, lon)
+                    if not location_key:
+                        errors.append(f"Не удалось найти город <<{city}>>")
+                        continue
+                    forecast = weather.get_forecast_data(location_key, days=forecast_days)
+                    if not forecast:
+                        errors.append(f"Не удалось получить прогноз для города <<{city}>>")
+                        continue
+                    weather_data[city] = {
+                        "forecast": forecast,
+                        "latitude": lat,
+                        "longitude": lon,
+                    }
+                    city_coordinates.append({"city": city, "lat": lat, "lon": lon})
+                except APIQuotaExceededError:
+                    errors.append(f"Превышена квота запросов для API по городу <<{city}>>")
+                except Exception as e:
+                    errors.append(f"Ошибка обработки города <<{city}>>: {str(e)}")
 
-        if not weather_data:
-            return html.Div(errors)
+            if not weather_data:
+                return html.Div(errors)
 
-        output_children = []
+            output_children = []
 
-        if errors:
-            output_children.append(html.Div(errors))
+            if errors:
+                output_children.append(html.Div(errors))
 
-        df_city_coordinates = pd.DataFrame(city_coordinates)
-        fig = go.Figure()
+            try:
+                df_city_coordinates = pd.DataFrame(city_coordinates)
+                fig = go.Figure()
 
-        fig.add_trace(
-            go.Scattermapbox(
-                lat=df_city_coordinates["lat"],
-                lon=df_city_coordinates["lon"],
-                mode="markers+lines",
-                marker=go.scattermapbox.Marker(size=9),
-                text=df_city_coordinates["city"],
-            )
-        )
+                fig.add_trace(
+                    go.Scattermapbox(
+                        lat=df_city_coordinates["lat"],
+                        lon=df_city_coordinates["lon"],
+                        mode="markers+lines",
+                        marker=go.scattermapbox.Marker(size=9),
+                        text=df_city_coordinates["city"],
+                    )
+                )
 
-        fig.update_layout(
-            mapbox_style="open-street-map",
-            mapbox_zoom=3,
-            mapbox_center_lat=df_city_coordinates["lat"].mean(),
-            mapbox_center_lon=df_city_coordinates["lon"].mean(),
-            height=500,
-        )
+                fig.update_layout(
+                    mapbox_style="open-street-map",
+                    mapbox_zoom=3,
+                    mapbox_center_lat=df_city_coordinates["lat"].mean(),
+                    mapbox_center_lon=df_city_coordinates["lon"].mean(),
+                    height=500,
+                )
 
-        fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
+                fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
 
-        output_children.append(dcc.Graph(figure=fig))
+                output_children.append(dcc.Graph(figure=fig))
 
-        for city, data in weather_data.items():
-            forecast = data["forecast"]
-            dates = []
-            min_temps = []
-            max_temps = []
-            wind_speeds = []
-            precipitation_probs = []
-            for day in forecast["DailyForecasts"]:
-                dates.append(day["Date"][:10])
-                min_temps.append(day["Temperature"]["Minimum"]["Value"])
-                max_temps.append(day["Temperature"]["Maximum"]["Value"])
-                wind_speeds.append(day["Day"]["Wind"]["Speed"]["Value"])
-                precipitation_probs.append(day["Day"]["PrecipitationProbability"])
+                for city, data in weather_data.items():
+                    forecast = data["forecast"]
+                    dates = []
+                    min_temps = []
+                    max_temps = []
+                    wind_speeds = []
+                    precipitation_probs = []
+                    for day in forecast["DailyForecasts"]:
+                        dates.append(day["Date"][:10])
+                        min_temps.append(day["Temperature"]["Minimum"]["Value"])
+                        max_temps.append(day["Temperature"]["Maximum"]["Value"])
+                        wind_speeds.append(day["Day"]["Wind"]["Speed"]["Value"])
+                        precipitation_probs.append(day["Day"]["PrecipitationProbability"])
 
-            temp_trace_min = go.Scatter(x=dates, y=min_temps, mode="lines+markers", name="Мин. температура")
-            temp_trace_max = go.Scatter(x=dates, y=max_temps, mode="lines+markers", name="Макс. температура")
+                    temp_trace_min = go.Scatter(x=dates, y=min_temps, mode="lines+markers", name="Мин. температура")
+                    temp_trace_max = go.Scatter(x=dates, y=max_temps, mode="lines+markers", name="Макс. температура")
 
-            temp_layout = go.Layout(
-                title=f"Температура в городе '{city}'",
-                xaxis={"title": "Дата"},
-                yaxis={"title": "Температура (°C)"},
-            )
-            temp_fig = go.Figure(
-                data=[temp_trace_min, temp_trace_max], layout=temp_layout
-            )
-            output_children.append(dcc.Graph(figure=temp_fig))
+                    temp_layout = go.Layout(
+                        title=f"Температура в городе '{city}'",
+                        xaxis={"title": "Дата"},
+                        yaxis={"title": "Температура (°C)"},
+                    )
+                    temp_fig = go.Figure(
+                        data=[temp_trace_min, temp_trace_max], layout=temp_layout
+                    )
+                    output_children.append(dcc.Graph(figure=temp_fig))
 
-            wind_trace = go.Bar(x=dates, y=wind_speeds, name="Скорость ветра")
-            wind_layout = go.Layout(
-                title=f"Скорость ветра в городе '{city}'",
-                xaxis={"title": "Дата"},
-                yaxis={"title": "Скорость ветра (км/ч)"},
-            )
-            wind_fig = go.Figure(data=[wind_trace], layout=wind_layout)
-            output_children.append(dcc.Graph(figure=wind_fig))
+                    wind_trace = go.Bar(x=dates, y=wind_speeds, name="Скорость ветра")
+                    wind_layout = go.Layout(
+                        title=f"Скорость ветра в городе '{city}'",
+                        xaxis={"title": "Дата"},
+                        yaxis={"title": "Скорость ветра (км/ч)"},
+                    )
+                    wind_fig = go.Figure(data=[wind_trace], layout=wind_layout)
+                    output_children.append(dcc.Graph(figure=wind_fig))
 
-            precipitation_prob_trace = go.Bar(x=dates, y=precipitation_probs, name="Вероятность осадков")
-            precipitation_prob_layout = go.Layout(
-                title=f"Вероятность дождя в городе '{city}'",
-                xaxis={"title": "Дата"},
-                yaxis={"title": "Вероятность (%)"},
-            )
-            precip_fig = go.Figure(data=[precipitation_prob_trace], layout=precipitation_prob_layout)
-            output_children.append(dcc.Graph(figure=precip_fig))
+                    precipitation_prob_trace = go.Bar(x=dates, y=precipitation_probs, name="Вероятность осадков")
+                    precipitation_prob_layout = go.Layout(
+                        title=f"Вероятность дождя в городе '{city}'",
+                        xaxis={"title": "Дата"},
+                        yaxis={"title": "Вероятность (%)"},
+                    )
+                    precip_fig = go.Figure(data=[precipitation_prob_trace], layout=precipitation_prob_layout)
+                    output_children.append(dcc.Graph(figure=precip_fig))
+            except Exception as e:
+                logging.error(f"Ошибка при создании графиков: {str(e)}")
+                return html.Div("Произошла ошибка. Пожалуйста, попробуйте еще раз.", style={"color": "red"})
 
-        return output_children
-    else:
-        return html.Div()
+            return output_children
+        else:
+            return html.Div()
+    except Exception as e:
+        logging.error(f"Ошибка при обработке прогноза: {str(e)}")
+        return html.Div("Произошла ошибка. Пожалуйста, попробуйте еще раз.", style={"color": "red"})
 
 
 if __name__ == "__main__":
-    app.run_server(debug=True)
+    try:
+        app.run_server(debug=True)
+    except Exception as e:
+        logging.error(f"Ошибка при запуске сервера: {str(e)}")
