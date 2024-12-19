@@ -1,76 +1,190 @@
-import dash
-from dash import dcc, html, Input, Output
+from flask import Flask, render_template, request
 from main import Location, Weather, APIQuotaExceededError
 import os
+from dash import Dash, html, dcc, Input, Output, State, ALL
+import plotly.graph_objects as go
+import pandas as pd
 
-app = dash.Dash(__name__)
+app = Dash(__name__)
 
-ACCUWEATHER_API_KEY = os.environ["ACCUWEATHER_API_KEY_6"]
+ACCUWEATHER_API_KEY = os.environ["ACCUWEATHER_API_KEY_8"]
 YANDEX_API_KEY = os.environ["YANDEX_API_KEY"]
 
 location = Location(accuweather_api_key=ACCUWEATHER_API_KEY, yandex_api_key=YANDEX_API_KEY)
 weather = Weather(accuweather_api_key=ACCUWEATHER_API_KEY)
 
-# Определяем layout приложения
-app.layout = html.Div([
-    html.H1("Погода и оценка путешествия"),
-
-    # Ввод данных для городов
-    html.Div([
-        html.Label("Начальный город:"),
-        dcc.Input(id="start-city", type="text", value="", style={"marginRight": "10px"}),
-        html.Label("Конечный город:"),
-        dcc.Input(id="end-city", type="text", value=""),
-    ], style={"marginBottom": "20px"}),
-
-    # Кнопка для отправки формы
-    html.Button("Получить погоду", id="submit-btn", n_clicks=0),
-
-    # Результаты
-    html.Div(id="result-1", style={"marginTop": "20px"}),
-    html.Div(id="result-2"),
-    html.Div(id="result-3"),
-])
-
-# Колбэк для обработки данных и вывода результатов
-@app.callback(
-    [Output("result-1", "children"),
-     Output("result-2", "children"),
-     Output("result-3", "children")],
-    [Input("submit-btn", "n_clicks")],
-    [Input("start-city", "value"),
-     Input("end-city", "value")]
+app.layout = html.Div(
+    [
+        html.H1("Прогноз погоды"),
+        html.Div(
+            [
+                html.Label("Введите города маршрута:"),
+                html.Div(
+                    [
+                        dcc.Input(
+                            id={"type": "city-input", "index": 0},
+                            type="text",
+                            placeholder="Город №1",
+                        ),
+                    ],
+                    id="city-input-container",
+                ),
+                html.Button("Добавить город в маршрут", id="add-city", n_clicks=0),
+            ]
+        ),
+        html.Div(
+            [
+                html.Label("Выберите, на сколько дней построить прогноз:"),
+                dcc.Dropdown(
+                    id="forecast-days",
+                    options=[
+                        {"label": "1 день", "value": 1},
+                        {"label": "5 дней", "value": 5},
+                        {"label": "10 дней", "value": 10},
+                        {"label": "15 дней", "value": 15},
+                    ],
+                    value=1,
+                ),
+            ]
+        ),
+        html.Button("Получить прогноз", id="submit-button", n_clicks=0),
+        html.Div(id="output-container"),
+    ]
 )
-def update_weather(n_clicks, start_city, end_city):
-    result_1 = None
-    result_2 = None
-    result_3 = None
 
+
+@app.callback(
+    Output("city-input-container", "children"),
+    Input("add-city", "n_clicks"),
+    State("city-input-container", "children"),
+)
+def city_inputs(n_clicks, children):
+    """функция для динамического добавления полей ввода городов"""
+    new_children = children.copy()
+    new_input = dcc.Input(
+        id={"type": "city-input", "index": n_clicks},
+        type="text",
+        placeholder=f"Город №{n_clicks+2}",
+    )
+    new_children.append(new_input)
+    return new_children
+
+
+@app.callback(
+    Output("output-container", "children"),
+    Input("submit-button", "n_clicks"),
+    State({"type": "city-input", "index": ALL}, "value"),
+    State("forecast-days", "value"),
+)
+def update_output(n_clicks, cities, forecast_days):
+    """функция для обработки данных и генерации выходных данных"""
     if n_clicks > 0:
-        try:
-            # Получаем погоду для начального города
-            find_start_city, start_weather = weather.get_weather(start_city, location)
-            start_estimate = weather.check_bad_weather()
+        all_cities = [city for city in cities if city]
+        if not all_cities:
+            return html.Div("Пожалуйста, введите хотя бы один город.")
 
-            # Получаем погоду для конечного города
-            find_end_city, end_weather = weather.get_weather(end_city, location)
-            end_estimate = weather.check_bad_weather()
+        weather_data = {}
+        city_coordinates = []
+        errors = []
+        for city in all_cities:
+            lat, lon = location.get_coordinates(city)
+            location_key = location.get_location_key(lat, lon)
+            if not location_key:
+                errors.append(f"Не удалось найти город <<{city}>>")
+                continue
+            forecast = weather.get_forecast_data(location_key, days=forecast_days)
+            if not forecast:
+                errors.append(f"Не удалось получить прогноз для города <<{city}>>")
+                continue
+            weather_data[city] = {
+                "forecast": forecast,
+                "latitude": lat,
+                "longitude": lon,
+            }
+            city_coordinates.append({"city": city, "lat": lat, "lon": lon})
 
-            # Формируем текстовые результаты
-            result_1 = f"Погода в городе {find_start_city}:\n{start_weather}\nОценка: {start_estimate}"
-            result_2 = f"Погода в городе {find_end_city}:\n{end_weather}\nОценка: {end_estimate}"
+        if not weather_data:
+            return html.Div(errors)
 
-            if (len(start_estimate) == 0) and (len(end_estimate) == 0):
-                result_3 = "Погодные условия благоприятны! Доброй дороги!"
-            else:
-                result_3 = "Погодные условия не благоприятны! Мы не советуем вам сейчас отправляться в это путешествие :("
-        except APIQuotaExceededError:
-            return "Превышен лимит запросов к API. Пожалуйста, попробуйте позже."
-        except Exception as e:
-            print(f"Произошла ошибка: {e}")
-            return "Произошла ошибка. Попробуйте снова."
+        output_children = []
 
-    return result_1, result_2, result_3
+        if errors:
+            output_children.append(html.Div(errors))
+
+        df_city_coordinates = pd.DataFrame(city_coordinates)
+        fig = go.Figure()
+
+        fig.add_trace(
+            go.Scattermapbox(
+                lat=df_city_coordinates["lat"],
+                lon=df_city_coordinates["lon"],
+                mode="markers+lines",
+                marker=go.scattermapbox.Marker(size=9),
+                text=df_city_coordinates["city"],
+            )
+        )
+
+        fig.update_layout(
+            mapbox_style="open-street-map",
+            mapbox_zoom=3,
+            mapbox_center_lat=df_city_coordinates["lat"].mean(),
+            mapbox_center_lon=df_city_coordinates["lon"].mean(),
+            height=500,
+        )
+
+        fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
+
+        output_children.append(dcc.Graph(figure=fig))
+
+        for city, data in weather_data.items():
+            forecast = data["forecast"]
+            dates = []
+            min_temps = []
+            max_temps = []
+            wind_speeds = []
+            precipitation_probs = []
+            for day in forecast["DailyForecasts"]:
+                dates.append(day["Date"][:10])
+                min_temps.append(day["Temperature"]["Minimum"]["Value"])
+                max_temps.append(day["Temperature"]["Maximum"]["Value"])
+                wind_speeds.append(day["Day"]["Wind"]["Speed"]["Value"])
+                precipitation_probs.append(day["Day"]["PrecipitationProbability"])
+
+            temp_trace_min = go.Scatter(x=dates, y=min_temps, mode="lines+markers", name="Мин. температура")
+            temp_trace_max = go.Scatter(x=dates, y=max_temps, mode="lines+markers", name="Макс. температура")
+
+            temp_layout = go.Layout(
+                title=f"Температура в городе '{city}'",
+                xaxis={"title": "Дата"},
+                yaxis={"title": "Температура (°C)"},
+            )
+            temp_fig = go.Figure(
+                data=[temp_trace_min, temp_trace_max], layout=temp_layout
+            )
+            output_children.append(dcc.Graph(figure=temp_fig))
+
+            wind_trace = go.Bar(x=dates, y=wind_speeds, name="Скорость ветра")
+            wind_layout = go.Layout(
+                title=f"Скорость ветра в городе '{city}'",
+                xaxis={"title": "Дата"},
+                yaxis={"title": "Скорость ветра (км/ч)"},
+            )
+            wind_fig = go.Figure(data=[wind_trace], layout=wind_layout)
+            output_children.append(dcc.Graph(figure=wind_fig))
+
+            precipitation_prob_trace = go.Bar(x=dates, y=precipitation_probs, name="Вероятность осадков")
+            precipitation_prob_layout = go.Layout(
+                title=f"Вероятность дождя в городе '{city}'",
+                xaxis={"title": "Дата"},
+                yaxis={"title": "Вероятность (%)"},
+            )
+            precip_fig = go.Figure(data=[precipitation_prob_trace], layout=precipitation_prob_layout)
+            output_children.append(dcc.Graph(figure=precip_fig))
+
+        return output_children
+    else:
+        return html.Div()
+
 
 if __name__ == "__main__":
     app.run_server(debug=True)

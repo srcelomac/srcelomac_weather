@@ -2,7 +2,7 @@ import os
 import flask
 import requests
 
-accuweather_api_key = os.environ["ACCUWEATHER_API_KEY"]
+accuweather_api_key = os.environ["ACCUWEATHER_API_KEY_8"]
 yandex_api_key = os.environ["YANDEX_API_KEY"]
 
 find_city = ''
@@ -43,15 +43,22 @@ class Location:
                 coords = data['response']['GeoObjectCollection']['featureMember'][0]['GeoObject']['Point']['pos']
                 find_city = data['response']['GeoObjectCollection']['featureMember'][0]['GeoObject']['name']
                 lon, lat = coords.split(' ')
-                return str(lon), str(lat)
+                lat = float(lat)
+                # print(f"-------------lat------------")
+                # print(f"------------{city}------------")
+                # print(lat)
+                lon = float(lon)
+                # print(f"-------------lon------------")
+                # print(f"------------{city}------------")
+                # print(lon)
+                return lat, lon
             except Exception as e:
                 raise Exception(f"Ошибка получения координат: {e}")
         return None, None
 
 
-    def get_location_key(self, city: str):
+    def get_location_key(self, lat, lon):
         try:
-            lon, lat = self.get_coordinates(city)
             params = {
                 'apikey': self.accuweather_key,
                 'q': f'{lat},{lon}'
@@ -81,69 +88,35 @@ class Weather:
         self.accuweather_key = accuweather_api_key
         self.weather = {}
 
-    def get_current_weather(self, city: str, location: Location):
-        try:
-            location_key = location.get_location_key(city)
-
-            if not location_key:
-                raise Exception(f"Не удалось получить location_key")
-
-            params = {
-                "apikey": self.accuweather_key,
-                "details": "true"
-            }
-            response = requests.get(f"http://dataservice.accuweather.com/currentconditions/v1/{location_key}", params=params)
-
-            if response.status_code != 200 and response.status_code != 201:
-                return f"Ошибка при получении данных о погоде. Код ошибки: {response.status_code}"
-
-            data = response.json()
-            self.weather['temperature'] = data[0]['Temperature']['Metric']['Value']
-            self.weather['humidity'] = data[0]['RelativeHumidity']
-            self.weather['wind_speed'] = data[0]['Wind']['Speed']['Metric']['Value']
-            return f"   - Температура: {self.weather['temperature']}°C \n   - Влажность: {self.weather['humidity']}% \n   - Скорость ветра: {self.weather['wind_speed']} м/с"
-            #return data
-        except APIQuotaExceededError as e:
-            print(f"Ошибка квоты API: {e}")
-            raise
-        except Exception as e:
-            raise Exception(f"Ошибка получения данных текущей погоды: {e}")
-
-
-
-
-
-    def get_forecast(self, city: str, location: Location):
-        try:
-            location_key = location.get_location_key(city)
-
-            params = {
-                'apikey': self.accuweather_key,
-                'language': 'ru',
-                'details': 'true',
-                'metric': 'true'
-            }
-            response = requests.get(f"http://dataservice.accuweather.com/forecasts/v1/daily/1day/{location_key}", params=params)
-
-            data = response.json()
-            self.weather['precipitation_prob'] = data['DailyForecasts'][0]['Day']['PrecipitationProbability']
-            return f"   - Шанс дождя: {self.weather['precipitation_prob']}%"
-            #return data
-        except Exception as e:
-            raise Exception(f"Ошибка получения данных прогноза погоды: {e}")
-
-    def get_weather(self, city: str, location: Location):
-        global find_city
-        try:
-            current_weather = self.get_current_weather(city, location)
-            forecast = self.get_forecast(city, location)
-        except APIQuotaExceededError as e:
-            print(f"Обработка APIQuotaExceededError: {e}")
-            raise
-        except Exception as e:
-            raise Exception(f"Ошибка получения данных текущей погоды и прогноза: {e}")
-
-        return find_city, f"{current_weather}\n{forecast}"
+    def get_forecast_data(self, location_key, days=1):
+        if days == 1:
+            forecast_url = (
+                f"http://dataservice.accuweather.com/forecasts/v1/daily/1day/{location_key}"
+            )
+        elif days == 5:
+            forecast_url = (
+                f"http://dataservice.accuweather.com/forecasts/v1/daily/5day/{location_key}"
+            )
+        elif days == 10:
+            forecast_url = f"http://dataservice.accuweather.com/forecasts/v1/daily/10day/{location_key}"
+        elif days == 15:
+            forecast_url = f"http://dataservice.accuweather.com/forecasts/v1/daily/15day/{location_key}"
+        else:
+            forecast_url = (
+                f"http://dataservice.accuweather.com/forecasts/v1/daily/5day/{location_key}"
+            )
+        params = {
+            "apikey": accuweather_api_key,
+            "language": "ru",
+            "details": "true",
+            "metric": "true",
+        }
+        response = requests.get(forecast_url, params=params)
+        data = response.json()
+        if data:
+            return data
+        else:
+            return None
 
     def check_bad_weather(self):
         try:
