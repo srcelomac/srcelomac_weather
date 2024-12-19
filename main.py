@@ -89,34 +89,42 @@ class Weather:
         self.weather = {}
 
     def get_forecast_data(self, location_key, days=1):
-        if days == 1:
-            forecast_url = (
-                f"http://dataservice.accuweather.com/forecasts/v1/daily/1day/{location_key}"
-            )
-        elif days == 5:
-            forecast_url = (
-                f"http://dataservice.accuweather.com/forecasts/v1/daily/5day/{location_key}"
-            )
-        elif days == 10:
-            forecast_url = f"http://dataservice.accuweather.com/forecasts/v1/daily/10day/{location_key}"
-        elif days == 15:
-            forecast_url = f"http://dataservice.accuweather.com/forecasts/v1/daily/15day/{location_key}"
-        else:
-            forecast_url = (
-                f"http://dataservice.accuweather.com/forecasts/v1/daily/5day/{location_key}"
-            )
-        params = {
-            "apikey": accuweather_api_key,
-            "language": "ru",
-            "details": "true",
-            "metric": "true",
-        }
-        response = requests.get(forecast_url, params=params)
-        data = response.json()
-        if data:
-            return data
-        else:
-            return None
+        try:
+            if days == 1:
+                forecast_url = (
+                    f"http://dataservice.accuweather.com/forecasts/v1/daily/1day/{location_key}"
+                )
+            elif days == 5:
+                forecast_url = (
+                    f"http://dataservice.accuweather.com/forecasts/v1/daily/5day/{location_key}"
+                )
+            elif days == 10:
+                forecast_url = f"http://dataservice.accuweather.com/forecasts/v1/daily/10day/{location_key}"
+            elif days == 15:
+                forecast_url = f"http://dataservice.accuweather.com/forecasts/v1/daily/15day/{location_key}"
+            else:
+                forecast_url = (
+                    f"http://dataservice.accuweather.com/forecasts/v1/daily/5day/{location_key}"
+                )
+            params = {
+                "apikey": accuweather_api_key,
+                "language": "ru",
+                "details": "true",
+                "metric": "true",
+            }
+            response = requests.get(forecast_url, params=params)
+            data = response.json()
+            if data:
+                return data
+            else:
+                return
+        except APIQuotaExceededError as e:
+            print(f"Обработка APIQuotaExceededError: {e}")
+            raise
+        except KeyError as e:
+            raise Exception(f"Ошибка получения ключа локации: {e}")
+        except Exception as e:
+            raise Exception(f"Ошибка запроса к API AccuWeather: {e}")
 
     def check_bad_weather(self):
         try:

@@ -116,7 +116,7 @@ def update_output(n_clicks, cities, forecast_days):
                     errors.append(f"Ошибка обработки города <<{city}>>: {str(e)}")
 
             if not weather_data:
-                return html.Div(errors)
+                return html.Div(errors, style={"color": "red"})
 
             output_children = []
 
@@ -194,15 +194,19 @@ def update_output(n_clicks, cities, forecast_days):
                     precip_fig = go.Figure(data=[precipitation_prob_trace], layout=precipitation_prob_layout)
                     output_children.append(dcc.Graph(figure=precip_fig))
             except Exception as e:
+                print(f'Ошибка: {str(e)}')
+                if (str(e) == 'DailyForecasts'):
+                    logging.error(f"Лимит запросов к API исчерпан: {str(e)}")
+                    return html.Div("Лимит запросов к API исчерпан. Пожалуйста, попробуйте позже.", style={"color": "red"})
                 logging.error(f"Ошибка при создании графиков: {str(e)}")
-                return html.Div("Произошла ошибка. Пожалуйста, попробуйте еще раз.", style={"color": "red"})
+                return html.Div(f"Произошла ошибка: {str(e)}. Пожалуйста, попробуйте еще раз.", style={"color": "red"})
 
             return output_children
         else:
             return html.Div()
     except Exception as e:
         logging.error(f"Ошибка при обработке прогноза: {str(e)}")
-        return html.Div("Произошла ошибка. Пожалуйста, попробуйте еще раз.", style={"color": "red"})
+        return html.Div(f"Произошла ошибка: {str(e)}. Пожалуйста, попробуйте еще раз.", style={"color": "red"})
 
 
 if __name__ == "__main__":
