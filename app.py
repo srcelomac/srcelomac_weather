@@ -7,11 +7,10 @@ import pandas as pd
 import logging
 from dash import dash_table
 from dash.dash_table.Format import Group
+from config import TG_TOKEN, ACCUWEATHER_API_KEY, YANDEX_API_KEY
 
 app = Dash(__name__)
 
-ACCUWEATHER_API_KEY = os.environ["ACCUWEATHER_API_KEY_9"]
-YANDEX_API_KEY = os.environ["YANDEX_API_KEY"]
 
 location = Location(accuweather_api_key=ACCUWEATHER_API_KEY, yandex_api_key=YANDEX_API_KEY)
 weather = Weather(accuweather_api_key=ACCUWEATHER_API_KEY)

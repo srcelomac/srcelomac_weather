@@ -1,9 +1,8 @@
 import os
 import flask
 import requests
+from config import TG_TOKEN, ACCUWEATHER_API_KEY, YANDEX_API_KEY
 
-accuweather_api_key = os.environ["ACCUWEATHER_API_KEY_9"]
-yandex_api_key = os.environ["YANDEX_API_KEY"]
 
 find_city = ''
 
@@ -29,7 +28,6 @@ class Location:
             if response.status_code != 200:
                 print(f'Ошибка при получении данных. Код ошибки: {response.status_code}')
                 return (f'Ошибка при получении данных. Код ошибки: {response.status_code}')
-
             return response.json()
         except Exception as e:
             raise Exception(f"Ошибка запроса к API Яндекса: {e}")
@@ -99,7 +97,7 @@ class Weather:
                     f"http://dataservice.accuweather.com/forecasts/v1/daily/5day/{location_key}"
                 )
             params = {
-                "apikey": accuweather_api_key,
+                "apikey": ACCUWEATHER_API_KEY,
                 "language": "ru",
                 "details": "true",
                 "metric": "true",
