@@ -1,6 +1,6 @@
 from aiogram import Bot, Router, F
 from aiogram.filters import Command
-from aiogram.types import Message, ReplyKeyboardRemove
+from aiogram.types import Message, ReplyKeyboardRemove, KeyboardButton, ReplyKeyboardMarkup
 from aiogram.fsm.context import FSMContext
 import os
 import asyncio
@@ -13,6 +13,7 @@ from main import Weather, Location
 from aiogram.enums.parse_mode import ParseMode
 from dotenv import load_dotenv
 from pathlib import Path
+import keyboard
 
 env_path = Path("venv") / ".env"
 load_dotenv(dotenv_path=env_path)
@@ -34,13 +35,133 @@ class WeatherState(StatesGroup):
     end = State()
     days = State()
 
+class WeatherMultipleLocationsState(StatesGroup):
+    cities = State()
+    days = State()
+
 
 # Команда /start
 @router.message(Command(commands=["start"]))
 async def send_welcome(message: types.Message):
     await message.answer(
-        "Привет! Я бот для погоды. Отправьте /help, чтобы узнать, чем я могу Вам помочь."
+        "Привет! Я бот для погоды. Отправьте /help, чтобы узнать, чем я могу Вам помочь.",
+        reply_markup=keyboard.start_kb
     )
+
+# Обработка нажатия на кнопку "Прогноз для 2 точек"
+@router.message(F.text == "Прогноз для 2 точек")
+async def send_weather_command(message: types.Message, state: FSMContext):
+    await message.answer("Введите начальную точку маршрута:")
+    await state.set_state(WeatherState.start)
+
+# Обработка нажатия на кнопку "Прогноз для нескольких точек"
+@router.message(F.text == "Прогноз для нескольких точек")
+async def send_weather_multiple_locations_command(message: types.Message, state: FSMContext):
+    await message.answer("Введите город, для которого хотите получить прогноз:")
+    await state.set_state(WeatherMultipleLocationsState.cities)
+
+# Обработка ввода города
+@router.message(WeatherMultipleLocationsState.cities)
+async def process_multiple_cities(message: types.Message, state: FSMContext):
+    # Получаем данные из состояния, если они есть
+    data = await state.get_data()
+    cities = data.get("cities", [])
+
+    cities.append(message.text.strip())
+
+    await state.update_data(cities=cities)
+
+    await message.answer(f"Города для прогноза: {', '.join(cities)}", reply_markup=keyboard.weather_multiple_locations_kb)
+
+# Обработка нажатия на кнопку "Добавить город"
+@router.callback_query(F.data == "add_city", WeatherMultipleLocationsState.cities)
+async def add_city(callback_query: types.CallbackQuery):
+    await callback_query.answer()
+    await callback_query.message.answer("Введите следующий город:")
+
+# Обработка нажатия на кнопку "Убрать город"
+@router.callback_query(F.data == "remove_city", WeatherMultipleLocationsState.cities)
+async def remove_city(callback_query: types.CallbackQuery, state: FSMContext):
+    await callback_query.answer()
+
+    data = await state.get_data()
+    cities = data.get("cities", [])
+
+    if not cities:
+        await callback_query.message.answer("Список городов пуст.")
+        return
+
+    removed_city = cities.pop()
+
+    await state.update_data(cities=cities)
+
+    if cities:
+        city_list = ', '.join(cities)
+    else:
+        city_list = "Список городов пуст."
+
+    await callback_query.message.answer(f"Города для прогноза: {city_list}", reply_markup=keyboard.weather_multiple_locations_kb)
+
+# Обработка нажатия на кнопку "Получить прогноз"
+@router.callback_query(F.data == "get_forecast", WeatherMultipleLocationsState.cities)
+async def get_weather_for_multiple_cities(callback_query: types.CallbackQuery, state: FSMContext):
+    await callback_query.answer()
+
+    data = await state.get_data()
+    cities = data.get("cities", [])
+
+    if not cities:
+        await callback_query.message.answer("Список городов пуст. Пожалуйста, добавьте хотя бы один город.")
+        return
+
+
+    await callback_query.message.answer("На сколько дней предоставить прогноз?", reply_markup=keyboard.days_kb)
+    await state.set_state(WeatherMultipleLocationsState.days)
+
+@router.callback_query(F.data.isdigit(), WeatherMultipleLocationsState.days)
+async def process_number_of_days(callback_query: types.CallbackQuery, state: FSMContext):
+    await callback_query.answer()
+    await callback_query.message.delete()
+    await callback_query.message.answer("Подготавливаем прогноз, пожалуйста, ожидайте...")
+
+    days = int(callback_query.data)
+    data = await state.get_data()
+    cities = data.get("cities", [])
+
+    forecast_text = "<pre>Прогноз погоды для следующих городов на {days} дней:\n\n".format(days=days)
+    forecast_text += "Город        | Дата       | Мин. Темп. (°C) | Макс. Темп. (°C) | Ветер (км/ч) | Осадки (%) | Описание\n"
+    forecast_text += "----------------------------------------------------------------------\n"
+
+    for city in cities:
+        lat, lon = location.get_coordinates(city)
+        location_key = location.get_location_key(lat, lon)
+
+        if not location_key:
+            forecast_text += f"{city: <12} | Не удалось получить данные\n"
+            continue
+
+        forecast_data = weather.get_forecast_data(location_key, days)
+
+        if not forecast_data:
+            forecast_text += f"{city: <12} | Не удалось получить прогноз\n"
+            continue
+
+        for day in forecast_data["DailyForecasts"][:days]:
+            date = day["Date"][:10]
+            min_temp = day["Temperature"]["Minimum"]["Value"]
+            max_temp = day["Temperature"]["Maximum"]["Value"]
+            description = day["Day"]["IconPhrase"]
+            wind_speed = day["Day"]["Wind"]["Speed"]["Value"]
+            precipitation_prob = day["Day"]["PrecipitationProbability"]
+
+            forecast_text += f"{city: <12} | {date} | {min_temp: <14} | {max_temp: <14} | {wind_speed: <12} | {precipitation_prob: <10} | {description: <8}\n"
+
+    forecast_text += "</pre>"
+
+    await callback_query.message.answer(forecast_text, parse_mode=ParseMode.HTML)
+    await state.clear()
+
+
 
 
 # Команда /help
@@ -74,17 +195,8 @@ async def process_start_point(message: types.Message, state: FSMContext):
 async def process_end_point(message: types.Message, state: FSMContext):
     await state.update_data(end=message.text)
 
-    days_keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="1 день", callback_data="1")],
-            [InlineKeyboardButton(text="2 дня", callback_data="2")],
-            [InlineKeyboardButton(text="3 дня", callback_data="3")],
-            [InlineKeyboardButton(text="4 дня", callback_data="4")],
-            [InlineKeyboardButton(text="5 дней", callback_data="5")],
-        ]
-    )
     await message.answer(
-        "На сколько дней предоставить прогноз?", reply_markup=days_keyboard
+        "На сколько дней предоставить прогноз?", reply_markup=keyboard.days_kb
     )
     await state.set_state(WeatherState.days)
 
@@ -140,7 +252,7 @@ async def process_number_of_days(callback_query: types.CallbackQuery, state: FSM
         return
 
     forecast_text = f"<pre>Прогноз для маршрута {start_city} - {end_city} на {days} дней:\n\n"
-    forecast_text += "Дата       | Мин. Темп. (°C) | Макс. Темп. (°C) | Описание | Ветер (км/ч) | Осадки (%)\n"
+    forecast_text += "Дата       | Мин. Темп. (°C) | Макс. Темп. (°C) | Ветер (км/ч) | Осадки (%) | Описание\n"
     forecast_text += "--------------------------------------------------------------------------\n"
 
     forecast_text += f"\nПрогноз для города {start_city}:\n"
@@ -152,7 +264,7 @@ async def process_number_of_days(callback_query: types.CallbackQuery, state: FSM
         wind_speed = day["Day"]["Wind"]["Speed"]["Value"]  # Получаем скорость ветра
         precipitation_prob = day["Day"]["PrecipitationProbability"]
 
-        forecast_text += f"{date: <10} | {min_temp: <14} | {max_temp: <14} | {description: <8} | {wind_speed: <12} | {precipitation_prob: <10}\n"
+        forecast_text += f"{date: <10} | {min_temp: <14} | {max_temp: <14} | {wind_speed: <12} | {precipitation_prob: <10} | {description: <8}\n"
 
     forecast_text += "\n--------------------------------------------------------------------------\n"
 
