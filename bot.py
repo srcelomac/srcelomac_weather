@@ -9,9 +9,17 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
 import requests
-from config import TG_TOKEN, ACCUWEATHER_API_KEY, YANDEX_API_KEY
 from main import Weather, Location
 from aiogram.enums.parse_mode import ParseMode
+from dotenv import load_dotenv
+from pathlib import Path
+
+env_path = Path("venv") / ".env"
+load_dotenv(dotenv_path=env_path)
+
+ACCUWEATHER_API_KEY = os.getenv('ACCUWEATHER_API_KEY')
+YANDEX_API_KEY = os.getenv('YANDEX_API_KEY')
+TG_TOKEN = os.getenv('TG_TOKEN')
 
 bot = Bot(token=TG_TOKEN)
 storage = MemoryStorage()
@@ -81,7 +89,6 @@ async def process_end_point(message: types.Message, state: FSMContext):
     await state.set_state(WeatherState.days)
 
 
-# Обработка выбора временного интервала
 @router.callback_query(F.data.isdigit(), WeatherState.days)
 async def process_number_of_days(callback_query: types.CallbackQuery, state: FSMContext):
     await callback_query.answer()
