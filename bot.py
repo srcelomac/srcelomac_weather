@@ -168,27 +168,21 @@ async def process_number_of_days(callback_query: types.CallbackQuery, state: FSM
 
     for city in cities:
         lat, lon = location.get_coordinates(city)
-        cities_coordinates.append({"city": city, "lat": lat, "lon": lon})
         location_key = location.get_location_key(lat, lon)
 
         if not location_key:
             forecast_text += f"{city: <12} | Не удалось получить данные\n"
             continue
-        flag = False
+
         forecast_data = weather.get_forecast_data(location_key, days)
-
-        # data_queue.put({
-        #     "city_coordinates": cities_coordinates,
-        #     "weather": forecast_data,
-        #     "forecast_days": days
-        # }
-        save_forecast_to_json(cities_coordinates, forecast_data, days)
-        flag = True
-
-        if (flag):
-            dash_thread = threading.Thread(target=run_dash_app)
-            dash_thread.daemon = True  # Поток завершится, когда завершится основной процесс
-            dash_thread.start()  # Запускаем поток с Dash приложением
+        # print('-------CITY--------')
+        # print(city, '---', type(city))
+        weather_data[city] = {
+            "forecast": forecast_data,
+            "latitude": lat,
+            "longitude": lon,
+        }
+        cities_coordinates.append({"city": city, "lat": lat, "lon": lon})
 
         if not forecast_data:
             forecast_text += f"{city: <12} | Не удалось получить прогноз\n"
@@ -205,7 +199,22 @@ async def process_number_of_days(callback_query: types.CallbackQuery, state: FSM
             forecast_text += f"{city: <12} | {date} | {min_temp: <14} | {max_temp: <14} | {wind_speed: <12} | {precipitation_prob: <10} | {description: <8}\n"
 
     forecast_text += "</pre>"
-    await callback_query.message.answer("Прогноз погоды доступен по ссылке: http://localhost:8050", parse_mode=ParseMode.HTML)
+
+    save_forecast_to_json(cities_coordinates, weather_data, days)
+    time.sleep(1)
+    dash_thread = threading.Thread(target=run_dash_app)
+    dash_thread.daemon = True  # Поток завершится, когда завершится основной процесс
+    dash_thread.start()  # Запускаем поток с Dash приложением
+
+    # await callback_query.message.answer(
+    #     "🌤️ <b>Прогноз погоды на несколько дней</b> доступен в интерактивной панели, "
+    #     "где вы можете просматривать данные в виде графиков, таблиц и карты! 📊🗺️\n\n"
+    #     "👉 Для получения подробного прогноза погоды для выбранных городов, пожалуйста, "
+    #     'перейдите по <a href="http://localhost:8050"><b>этой ссылке</b></a>.',
+    #     parse_mode=ParseMode.HTML
+    # )
+    text = f"Для получения подробного и интерактивного прогноза погоды для выбранных городов, пожалуйста, перейдите по этой <a href='http://127.0.0.1:8050/'>ссылке</a>."
+    await callback_query.message.answer(text, parse_mode=ParseMode.HTML)
     await callback_query.message.answer(forecast_text, parse_mode=ParseMode.HTML)
     await state.clear()
 

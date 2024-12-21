@@ -23,30 +23,33 @@ import json
 
 def load_forecast_from_json(filename="weather_forecast.json"):
     try:
-        # Загружаем данные из файла
-        with open(filename, 'r') as f:
+        with open(filename, 'r', encoding='utf-8') as f:
             data = json.load(f)
 
-        # Извлекаем данные
         weather_data = data.get("weather", {})
-        forecast_days = data.get("forecast_days", 0)
+        forecast_days = data.get("forecast_days", 1)
         cities_coordinates = data.get("city_coordinates", [])
+        #print('----TRAP----')
+        #print(data)
 
-        # Возвращаем распакованные переменные
         return weather_data, forecast_days, cities_coordinates
 
-    except Exception as e:
-        print(f"Ошибка при загрузке данных из файла {filename}: {e}")
+    except FileNotFoundError:
+        print(f"Файл {filename} не найден.")
+        return None, None, None
+    except json.JSONDecodeError as e:
+        print(f"Ошибка чтения JSON: {str(e)}")
         return None, None, None
 
-weather_data, forecast_days, cities_coordinates = load_forecast_from_json()
 
-print('----------------------')
-print(weather_data)
-print('----------------------')
-print(forecast_days)
-print('----------------------')
-print(cities_coordinates)
+#weather_data, forecast_days, cities_coordinates = load_forecast_from_json()
+
+# print('-----------AAAAAAAAAA--------------')
+# print(weather_data)
+# print('----------------------')
+# print(forecast_days)
+# print('----------------------')
+# print(cities_coordinates)
 
 data_queue = Queue()
 
@@ -77,10 +80,10 @@ def update_output(current_children):
         output_children = []
         try:
             df_city_coordinates = pd.DataFrame(cities_coordinates)
-            # print('--------КООРДИНАТЫ-----------')
-            # print(df_city_coordinates)
-            # print('-------------------')
-            # print(df_city_coordinates.columns)
+            print('--------КООРДИНАТЫ-----------')
+            print(df_city_coordinates)
+            print('-------------------')
+            print(df_city_coordinates.columns)
             fig = go.Figure()
             fig.add_trace(
                 go.Scattermapbox(
@@ -101,8 +104,7 @@ def update_output(current_children):
             fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
             output_children.append(dcc.Graph(figure=fig))
             for city, data in weather_data.items():
-                #forecast = data["forecast"]
-                forecast = data
+                forecast = data["forecast"]
                 dates = []
                 min_temps = []
                 max_temps = []
@@ -148,8 +150,7 @@ def update_output(current_children):
                 output_children.append(dcc.Graph(figure=precip_fig))
             table_data = []
             for city, data in weather_data.items():
-                #forecast = data["forecast"]
-                forecast = data
+                forecast = data["forecast"]
                 for cnt, day in enumerate(forecast["DailyForecasts"]):
                     if (cnt >= forecast_days):
                         break
@@ -187,6 +188,8 @@ def update_output(current_children):
         return html.Div(f"Произошла ошибка: {str(e)}. Пожалуйста, попробуйте еще раз.", style={"color": "red"})
 
 def start_dash_app():
+    global weather_data, forecast_days, cities_coordinates
+    weather_data, forecast_days, cities_coordinates = load_forecast_from_json()
     app.run_server(debug=True, use_reloader=False)
 
 if __name__ == "__main__":
