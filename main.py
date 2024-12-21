@@ -76,8 +76,8 @@ class Location:
                 raise APIQuotaExceededError("Запросы к API закончились")
 
             if response.status_code != 200 and response.status_code != 201:
-                print('Ошибка при получении данных svg:', response.json())
-                return f'Ошибка при получении данных. Код ошибки: {response.status_code}'
+                print('Ошибка при получении данных:', response.json())
+                raise Exception(f'Ошибка при получении данных. Код ошибки: {response.status_code}')
 
             return response.json()['Key']
         except APIQuotaExceededError as e:
@@ -147,6 +147,6 @@ class Weather:
             else:
                 return "Погодные условия благоприятны"
         except KeyError as e:
-            return f"KeyError: {e} - Недостаточно данных для проверки погодных условий."
+            return KeyError(f"{e} - Недостаточно данных для проверки погодных условий.")
         except Exception as e:
-            return f"Произошла ошибка при оценке погодных условий: {e}"
+            raise Exception(f"Произошла ошибка при оценке погодных условий: {e}")

@@ -161,14 +161,28 @@ async def process_number_of_days(callback_query: types.CallbackQuery, state: FSM
     weather_data = {}
 
     for city in cities:
-        lat, lon = location.get_coordinates(city)
-        location_key = location.get_location_key(lat, lon)
+        try:
+            lat, lon = location.get_coordinates(city)
+            location_key = location.get_location_key(lat, lon)
+        except Exception as e:
+            await callback_query.message.answer(str(e), parse_mode=ParseMode.HTML)
+            await state.clear()
+            return
 
         if not location_key:
             forecast_text += f"{city: <12} | Не удалось получить данные\n"
             continue
 
-        forecast_data = weather.get_forecast_data(location_key, days)
+        try:
+            forecast_data = weather.get_forecast_data(location_key, days)
+        except Exception as e:
+            await callback_query.message.answer(str(e), parse_mode=ParseMode.HTML)
+            await state.clear()
+            return
+
+
+        # print('---------TEST---------')
+        # print(('Ошибка' in str(forecast_data)))
         # print('-------CITY--------')
         # print(city, '---', type(city))
         weather_data[city] = {
@@ -195,11 +209,16 @@ async def process_number_of_days(callback_query: types.CallbackQuery, state: FSM
 
     forecast_text += "</pre>"
 
-    save_forecast_to_json(cities_coordinates, weather_data, days)
-    #time.sleep(1)
-    dash_thread = threading.Thread(target=run_dash_app)
-    dash_thread.daemon = True
-    dash_thread.start()
+    try:
+        save_forecast_to_json(cities_coordinates, weather_data, days)
+        #time.sleep(1)
+        dash_thread = threading.Thread(target=run_dash_app)
+        dash_thread.daemon = True
+        dash_thread.start()
+    except Exception as e:
+        await callback_query.message.answer(f"Ошибка при запуске приложения: {str(e)}", parse_mode=ParseMode.HTML)
+        await state.clear()
+        return
 
     text = f"Для получения подробного и интерактивного прогноза погоды для выбранных городов, пожалуйста, перейдите по <a href='http://127.0.0.1:8050/'>ссылке</a>."
     await callback_query.message.answer(text, parse_mode=ParseMode.HTML)
@@ -259,11 +278,21 @@ async def process_number_of_days(callback_query: types.CallbackQuery, state: FSM
     start_city = data["start"]
     end_city = data["end"]
 
-    start_lat, start_lon = location.get_coordinates(start_city)
-    start_key = location.get_location_key(start_lat, start_lon)
+    try:
+        start_lat, start_lon = location.get_coordinates(start_city)
+        start_key = location.get_location_key(start_lat, start_lon)
+    except Exception as e:
+        await callback_query.message.answer(f"Стартовый город: {str(e)}", parse_mode=ParseMode.HTML)
+        await state.clear()
+        return
 
-    end_lat, end_lon = location.get_coordinates(end_city)
-    end_key = location.get_location_key(end_lat, end_lon)
+    try:
+        end_lat, end_lon = location.get_coordinates(end_city)
+        end_key = location.get_location_key(end_lat, end_lon)
+    except Exception as e:
+        await callback_query.message.answer(f"Конечный город: {str(e)}", parse_mode=ParseMode.HTML)
+        await state.clear()
+        return
 
     if not start_key:
         await callback_query.message.answer(
@@ -279,8 +308,18 @@ async def process_number_of_days(callback_query: types.CallbackQuery, state: FSM
         await state.clear()
         return
 
-    start_forecast = weather.get_forecast_data(start_key, days)
-    end_forecast = weather.get_forecast_data(end_key, days)
+    try:
+        start_forecast = weather.get_forecast_data(start_key, days)
+    except Exception as e:
+        await callback_query.message.answer(f"Стартовый город: {str(e)}", parse_mode=ParseMode.HTML)
+        await state.clear()
+        return
+    try:
+        end_forecast = weather.get_forecast_data(end_key, days)
+    except Exception as e:
+        await callback_query.message.answer(f"Конечный город: {str(e)}", parse_mode=ParseMode.HTML)
+        await state.clear()
+        return
 
     if not start_forecast:
         await callback_query.message.answer(
@@ -313,11 +352,16 @@ async def process_number_of_days(callback_query: types.CallbackQuery, state: FSM
     }
     cities_coordinates.append({"city": end_city, "lat": end_lat, "lon": end_lon})
 
-    save_forecast_to_json(cities_coordinates, weather_data, days)
-    #time.sleep(1)
-    dash_thread = threading.Thread(target=run_dash_app)
-    dash_thread.daemon = True
-    dash_thread.start()
+    try:
+        save_forecast_to_json(cities_coordinates, weather_data, days)
+        #time.sleep(1)
+        dash_thread = threading.Thread(target=run_dash_app)
+        dash_thread.daemon = True
+        dash_thread.start()
+    except Exception as e:
+        await callback_query.message.answer(f"Ошибка при запуске приложения: {str(e)}", parse_mode=ParseMode.HTML)
+        await state.clear()
+        return
 
     forecast_text = f"<pre>Прогноз для маршрута {start_city} - {end_city} на {days} дней:\n\n"
     forecast_text += "Дата       | Мин. Темп. (°C) | Макс. Темп. (°C) | Ветер (км/ч) | Осадки (%) | Описание\n"
