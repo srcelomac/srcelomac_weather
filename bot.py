@@ -20,6 +20,7 @@ import threading
 from bots_app import app, start_dash_app
 import time
 import json
+import re
 
 env_path = Path("venv") / ".env"
 load_dotenv(dotenv_path=env_path)
@@ -64,6 +65,10 @@ def save_forecast_to_json(city_coordinates, weather_data, forecast_days, filenam
         print(f"Данные успешно сохранены в файл {filename}")
     except Exception as e:
         print(f"Ошибка при сохранении данных в файл: {e}")
+
+def is_coordinates(text: str) -> bool:
+    pattern = r'^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$'
+    return bool(re.match(pattern, text.strip()))
 
 def run_dash_app():
     try:
@@ -254,26 +259,35 @@ async def get_weather_route(message: types.Message, state: FSMContext):
 
 @router.message(WeatherState.start)
 async def process_start_point(message: types.Message, state: FSMContext):
-    if any(char.isdigit() for char in message.text.strip()):
+    if is_coordinates(message.text):
+        start_lat, start_lon = map(float, message.text.split(","))
+        await state.update_data(start='Начальная точка', start_lat=start_lat, start_lon=start_lon)
+        await message.answer("Конечная точка маршрута (введите город или координаты):")
+    elif any(char.isdigit() for char in message.text):
         await message.answer(
             "Название города не может содержать цифры. Пожалуйста, введите правильное название города.")
         return
-    await state.update_data(start=message.text)
-    await message.answer("Введите конечную точку маршрута:")
+    else:
+        await state.update_data(start=message.text)
+        await message.answer("Конечная точка маршрута (введите город или координаты):")
+
     await state.set_state(WeatherState.end)
 
 
 @router.message(WeatherState.end)
 async def process_end_point(message: types.Message, state: FSMContext):
-    if any(char.isdigit() for char in message.text.strip()):
+    if is_coordinates(message.text):
+        end_lat, end_lon = map(float, message.text.split(","))
+        await state.update_data(end='Конечная точка', end_lat=end_lat, end_lon=end_lon)
+        await message.answer("На сколько дней предоставить прогноз?", reply_markup=keyboard.days_kb)
+    elif any(char.isdigit() for char in message.text):
         await message.answer(
             "Название города не может содержать цифры. Пожалуйста, введите правильное название города.")
         return
-    await state.update_data(end=message.text)
+    else:
+        await state.update_data(end=message.text)
+        await message.answer("На сколько дней предоставить прогноз?", reply_markup=keyboard.days_kb)
 
-    await message.answer(
-        "На сколько дней предоставить прогноз?", reply_markup=keyboard.days_kb
-    )
     await state.set_state(WeatherState.days)
 
 
@@ -287,19 +301,32 @@ async def process_number_of_days(callback_query: types.CallbackQuery, state: FSM
     days = int(callback_query.data)
 
     data = await state.get_data()
-    start_city = data["start"]
-    end_city = data["end"]
+    start_city = data.get("start")
+    end_city = data.get("end")
+    start_lat = data.get("start_lat")
+    start_lon = data.get("start_lon")
+    end_lat = data.get("end_lat")
+    end_lon = data.get("end_lon")
+
+    if start_lat and start_lon:
+        pass
+    else:
+        start_lat, start_lon = location.get_coordinates(start_city)
 
     try:
-        start_lat, start_lon = location.get_coordinates(start_city)
         start_key = location.get_location_key(start_lat, start_lon)
     except Exception as e:
         await callback_query.message.answer(f"Стартовый город: {str(e)}", parse_mode=ParseMode.HTML)
         await state.clear()
         return
 
-    try:
+
+    if end_lat and end_lon:
+        pass
+    else:
         end_lat, end_lon = location.get_coordinates(end_city)
+
+    try:
         end_key = location.get_location_key(end_lat, end_lon)
     except Exception as e:
         await callback_query.message.answer(f"Конечный город: {str(e)}", parse_mode=ParseMode.HTML)
