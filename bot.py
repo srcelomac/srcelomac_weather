@@ -14,6 +14,12 @@ from aiogram.enums.parse_mode import ParseMode
 from dotenv import load_dotenv
 from pathlib import Path
 import keyboard
+from queue import Queue
+from threading import Thread
+import threading
+from bots_app import app, start_dash_app
+import time
+import json
 
 env_path = Path("venv") / ".env"
 load_dotenv(dotenv_path=env_path)
@@ -29,6 +35,11 @@ router = Router()
 location = Location(accuweather_api_key=ACCUWEATHER_API_KEY, yandex_api_key=YANDEX_API_KEY)
 weather = Weather(accuweather_api_key=ACCUWEATHER_API_KEY)
 
+data_queue = Queue()
+
+weather_data_app = None
+forecast_days_app = 1
+cities_coordinates_app = []
 
 class WeatherState(StatesGroup):
     start = State()
@@ -39,6 +50,26 @@ class WeatherMultipleLocationsState(StatesGroup):
     cities = State()
     days = State()
 
+
+def save_forecast_to_json(city_coordinates, weather_data, forecast_days, filename="weather_forecast.json"):
+    data = {
+        "city_coordinates": city_coordinates,
+        "weather": weather_data,
+        "forecast_days": forecast_days
+    }
+
+    try:
+        with open(filename, 'w') as f:
+            json.dump(data, f, indent=4)
+        print(f"Данные успешно сохранены в файл {filename}")
+    except Exception as e:
+        print(f"Ошибка при сохранении данных в файл: {e}")
+
+def run_dash_app():
+    try:
+        start_dash_app()  # Запускаем Dash приложение
+    except Exception as e:
+        print(f"Ошибка при запуске Dash приложения: {str(e)}")
 
 # Команда /start
 @router.message(Command(commands=["start"]))
@@ -132,15 +163,32 @@ async def process_number_of_days(callback_query: types.CallbackQuery, state: FSM
     forecast_text += "Город        | Дата       | Мин. Темп. (°C) | Макс. Темп. (°C) | Ветер (км/ч) | Осадки (%) | Описание\n"
     forecast_text += "----------------------------------------------------------------------\n"
 
+    cities_coordinates = []
+    weather_data = {}
+
     for city in cities:
         lat, lon = location.get_coordinates(city)
+        cities_coordinates.append({"city": city, "lat": lat, "lon": lon})
         location_key = location.get_location_key(lat, lon)
 
         if not location_key:
             forecast_text += f"{city: <12} | Не удалось получить данные\n"
             continue
-
+        flag = False
         forecast_data = weather.get_forecast_data(location_key, days)
+
+        # data_queue.put({
+        #     "city_coordinates": cities_coordinates,
+        #     "weather": forecast_data,
+        #     "forecast_days": days
+        # }
+        save_forecast_to_json(cities_coordinates, forecast_data, days)
+        flag = True
+
+        if (flag):
+            dash_thread = threading.Thread(target=run_dash_app)
+            dash_thread.daemon = True  # Поток завершится, когда завершится основной процесс
+            dash_thread.start()  # Запускаем поток с Dash приложением
 
         if not forecast_data:
             forecast_text += f"{city: <12} | Не удалось получить прогноз\n"
@@ -157,7 +205,7 @@ async def process_number_of_days(callback_query: types.CallbackQuery, state: FSM
             forecast_text += f"{city: <12} | {date} | {min_temp: <14} | {max_temp: <14} | {wind_speed: <12} | {precipitation_prob: <10} | {description: <8}\n"
 
     forecast_text += "</pre>"
-
+    await callback_query.message.answer("Прогноз погоды доступен по ссылке: http://localhost:8050", parse_mode=ParseMode.HTML)
     await callback_query.message.answer(forecast_text, parse_mode=ParseMode.HTML)
     await state.clear()
 
