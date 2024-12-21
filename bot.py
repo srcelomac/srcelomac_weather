@@ -94,6 +94,10 @@ async def send_weather_multiple_locations_command(message: types.Message, state:
 # Обработка ввода города
 @router.message(WeatherMultipleLocationsState.cities)
 async def process_multiple_cities(message: types.Message, state: FSMContext):
+    if any(char.isdigit() for char in message.text.strip()):
+        await message.answer(
+            "Название города не может содержать цифры. Пожалуйста, введите правильное название города.")
+        return
     data = await state.get_data()
     cities = data.get("cities", [])
 
@@ -250,6 +254,10 @@ async def get_weather_route(message: types.Message, state: FSMContext):
 
 @router.message(WeatherState.start)
 async def process_start_point(message: types.Message, state: FSMContext):
+    if any(char.isdigit() for char in message.text.strip()):
+        await message.answer(
+            "Название города не может содержать цифры. Пожалуйста, введите правильное название города.")
+        return
     await state.update_data(start=message.text)
     await message.answer("Введите конечную точку маршрута:")
     await state.set_state(WeatherState.end)
@@ -257,6 +265,10 @@ async def process_start_point(message: types.Message, state: FSMContext):
 
 @router.message(WeatherState.end)
 async def process_end_point(message: types.Message, state: FSMContext):
+    if any(char.isdigit() for char in message.text.strip()):
+        await message.answer(
+            "Название города не может содержать цифры. Пожалуйста, введите правильное название города.")
+        return
     await state.update_data(end=message.text)
 
     await message.answer(
