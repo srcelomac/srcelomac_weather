@@ -99,18 +99,45 @@ async def send_weather_multiple_locations_command(message: types.Message, state:
 # Обработка ввода города
 @router.message(WeatherMultipleLocationsState.cities)
 async def process_multiple_cities(message: types.Message, state: FSMContext):
-    if any(char.isdigit() for char in message.text.strip()):
+    if is_coordinates(message.text):
+        # Генерация уникального названия для точки
+        data = await state.get_data()
+        cities = data.get("cities", [])
+        coordinates = data.get("coordinates", [])
+
+        point_name = f"Точка №{len(cities) + len(coordinates) + 1}"
+
+        # Разделяем координаты
+        start_lat, start_lon = map(float, message.text.split(","))
+
+        # Добавляем точку и её координаты
+        cities.append(point_name)
+        coordinates.append((start_lat, start_lon))
+
+        # Обновляем состояние
+        await state.update_data(cities=cities, coordinates=coordinates)
+
+        await message.answer(f"Города для прогноза: {', '.join(cities)}",
+                             reply_markup=keyboard.weather_multiple_locations_kb)
+    elif any(char.isdigit() for char in message.text):
         await message.answer(
             "Название города не может содержать цифры. Пожалуйста, введите правильное название города.")
         return
-    data = await state.get_data()
-    cities = data.get("cities", [])
+    else:
+        # Добавление города в список
+        data = await state.get_data()
+        cities = data.get("cities", [])
+        coordinates = data.get("coordinates", [])
 
-    cities.append(message.text.strip())
+        cities.append(message.text.strip())
+        coordinates.append((None, None))
 
-    await state.update_data(cities=cities)
+        # Обновляем состояние
+        await state.update_data(cities=cities)
+        await state.update_data(coordinates=coordinates)
 
-    await message.answer(f"Города для прогноза: {', '.join(cities)}", reply_markup=keyboard.weather_multiple_locations_kb)
+        await message.answer(f"Города для прогноза: {', '.join(cities)}",
+                             reply_markup=keyboard.weather_multiple_locations_kb)
 
 
 # Обработка нажатия на кнопку "Убрать город"
@@ -120,14 +147,19 @@ async def remove_city(callback_query: types.CallbackQuery, state: FSMContext):
 
     data = await state.get_data()
     cities = data.get("cities", [])
+    coordinates = data.get("coordinates", [])
+    print('-------------COORDINATES-------------')
+    print(coordinates)
 
     if not cities:
         await callback_query.message.answer("Список городов пуст.")
         return
 
     removed_city = cities.pop()
-
     await state.update_data(cities=cities)
+
+    removed_coordinates = coordinates.pop()
+    await state.update_data(cities=coordinates)
 
     if cities:
         city_list = ', '.join(cities)
@@ -143,6 +175,7 @@ async def get_weather_for_multiple_cities(callback_query: types.CallbackQuery, s
 
     data = await state.get_data()
     cities = data.get("cities", [])
+    coordinates = data.get("coordinates", [])
 
     if not cities:
         await callback_query.message.answer("Список городов пуст. Пожалуйста, добавьте хотя бы один город.")
@@ -161,6 +194,7 @@ async def process_number_of_days(callback_query: types.CallbackQuery, state: FSM
     days = int(callback_query.data)
     data = await state.get_data()
     cities = data.get("cities", [])
+    coordinates = data.get("coordinates", [])
 
     forecast_text = "<pre>Прогноз погоды для следующих городов на {days} дней:\n\n".format(days=days)
     forecast_text += "Дата       | Мин. Темп. (°C) | Макс. Темп. (°C) | Ветер (км/ч) | Осадки (%) | Описание\n"
@@ -169,9 +203,13 @@ async def process_number_of_days(callback_query: types.CallbackQuery, state: FSM
     cities_coordinates = []
     weather_data = {}
 
-    for city in cities:
-        try:
+    for city, (coord_lat, coord_lon) in zip(cities, coordinates):
+        if coord_lat and coord_lon:
+            lat, lon = coord_lat, coord_lon
+        else:
             lat, lon = location.get_coordinates(city)
+
+        try:
             location_key = location.get_location_key(lat, lon)
         except Exception as e:
             await callback_query.message.answer(str(e), parse_mode=ParseMode.HTML)
