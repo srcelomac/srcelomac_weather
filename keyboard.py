@@ -15,7 +15,6 @@ start_kb = ReplyKeyboardMarkup(
 
 weather_multiple_locations_kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="➕ Добавить город", callback_data="add_city")],
             [InlineKeyboardButton(text="➖ Убрать город", callback_data="remove_city")],  # Кнопка для удаления города
             [InlineKeyboardButton(text="✅ Получить прогноз", callback_data="get_forecast")]
         ]

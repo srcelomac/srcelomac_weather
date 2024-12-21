@@ -67,7 +67,7 @@ def save_forecast_to_json(city_coordinates, weather_data, forecast_days, filenam
 
 def run_dash_app():
     try:
-        start_dash_app()  # Запускаем Dash приложение
+        start_dash_app()
     except Exception as e:
         print(f"Ошибка при запуске Dash приложения: {str(e)}")
 
@@ -94,7 +94,6 @@ async def send_weather_multiple_locations_command(message: types.Message, state:
 # Обработка ввода города
 @router.message(WeatherMultipleLocationsState.cities)
 async def process_multiple_cities(message: types.Message, state: FSMContext):
-    # Получаем данные из состояния, если они есть
     data = await state.get_data()
     cities = data.get("cities", [])
 
@@ -104,11 +103,6 @@ async def process_multiple_cities(message: types.Message, state: FSMContext):
 
     await message.answer(f"Города для прогноза: {', '.join(cities)}", reply_markup=keyboard.weather_multiple_locations_kb)
 
-# Обработка нажатия на кнопку "Добавить город"
-@router.callback_query(F.data == "add_city", WeatherMultipleLocationsState.cities)
-async def add_city(callback_query: types.CallbackQuery):
-    await callback_query.answer()
-    await callback_query.message.answer("Введите следующий город:")
 
 # Обработка нажатия на кнопку "Убрать город"
 @router.callback_query(F.data == "remove_city", WeatherMultipleLocationsState.cities)
@@ -160,7 +154,7 @@ async def process_number_of_days(callback_query: types.CallbackQuery, state: FSM
     cities = data.get("cities", [])
 
     forecast_text = "<pre>Прогноз погоды для следующих городов на {days} дней:\n\n".format(days=days)
-    forecast_text += "Город        | Дата       | Мин. Темп. (°C) | Макс. Темп. (°C) | Ветер (км/ч) | Осадки (%) | Описание\n"
+    forecast_text += "Дата       | Мин. Темп. (°C) | Макс. Темп. (°C) | Ветер (км/ч) | Осадки (%) | Описание\n"
     forecast_text += "----------------------------------------------------------------------\n"
 
     cities_coordinates = []
@@ -188,6 +182,7 @@ async def process_number_of_days(callback_query: types.CallbackQuery, state: FSM
             forecast_text += f"{city: <12} | Не удалось получить прогноз\n"
             continue
 
+        forecast_text += f"\nПрогноз для города {city}:\n"
         for day in forecast_data["DailyForecasts"][:days]:
             date = day["Date"][:10]
             min_temp = day["Temperature"]["Minimum"]["Value"]
@@ -196,24 +191,17 @@ async def process_number_of_days(callback_query: types.CallbackQuery, state: FSM
             wind_speed = day["Day"]["Wind"]["Speed"]["Value"]
             precipitation_prob = day["Day"]["PrecipitationProbability"]
 
-            forecast_text += f"{city: <12} | {date} | {min_temp: <14} | {max_temp: <14} | {wind_speed: <12} | {precipitation_prob: <10} | {description: <8}\n"
+            forecast_text += f"{date} | {min_temp: <14} | {max_temp: <14} | {wind_speed: <12} | {precipitation_prob: <10} | {description: <8}\n"
 
     forecast_text += "</pre>"
 
     save_forecast_to_json(cities_coordinates, weather_data, days)
-    time.sleep(1)
+    #time.sleep(1)
     dash_thread = threading.Thread(target=run_dash_app)
-    dash_thread.daemon = True  # Поток завершится, когда завершится основной процесс
-    dash_thread.start()  # Запускаем поток с Dash приложением
+    dash_thread.daemon = True
+    dash_thread.start()
 
-    # await callback_query.message.answer(
-    #     "🌤️ <b>Прогноз погоды на несколько дней</b> доступен в интерактивной панели, "
-    #     "где вы можете просматривать данные в виде графиков, таблиц и карты! 📊🗺️\n\n"
-    #     "👉 Для получения подробного прогноза погоды для выбранных городов, пожалуйста, "
-    #     'перейдите по <a href="http://localhost:8050"><b>этой ссылке</b></a>.',
-    #     parse_mode=ParseMode.HTML
-    # )
-    text = f"Для получения подробного и интерактивного прогноза погоды для выбранных городов, пожалуйста, перейдите по этой <a href='http://127.0.0.1:8050/'>ссылке</a>."
+    text = f"Для получения подробного и интерактивного прогноза погоды для выбранных городов, пожалуйста, перейдите по <a href='http://127.0.0.1:8050/'>ссылке</a>."
     await callback_query.message.answer(text, parse_mode=ParseMode.HTML)
     await callback_query.message.answer(forecast_text, parse_mode=ParseMode.HTML)
     await state.clear()
@@ -230,7 +218,7 @@ async def send_help(message: types.Message):
         "Список доступных команд:\n"
         "/start - Приветственное сообщение\n"
         "/help - Список команд\n"
-        "/weather - Запрос прогноза погоды"
+        "/weather - Запрос прогноза погоды (2 точки маршрута)"
     )
 
 
@@ -308,6 +296,29 @@ async def process_number_of_days(callback_query: types.CallbackQuery, state: FSM
         await state.clear()
         return
 
+    cities_coordinates = []
+    weather_data = {}
+
+    weather_data[start_city] = {
+        "forecast": start_forecast,
+        "latitude": start_lat,
+        "longitude": start_lon,
+    }
+    cities_coordinates.append({"city": start_city, "lat": start_lat, "lon": start_lon})
+
+    weather_data[end_city] = {
+        "forecast": end_forecast,
+        "latitude": end_lat,
+        "longitude": end_lon,
+    }
+    cities_coordinates.append({"city": end_city, "lat": end_lat, "lon": end_lon})
+
+    save_forecast_to_json(cities_coordinates, weather_data, days)
+    #time.sleep(1)
+    dash_thread = threading.Thread(target=run_dash_app)
+    dash_thread.daemon = True
+    dash_thread.start()
+
     forecast_text = f"<pre>Прогноз для маршрута {start_city} - {end_city} на {days} дней:\n\n"
     forecast_text += "Дата       | Мин. Темп. (°C) | Макс. Темп. (°C) | Ветер (км/ч) | Осадки (%) | Описание\n"
     forecast_text += "--------------------------------------------------------------------------\n"
@@ -318,7 +329,7 @@ async def process_number_of_days(callback_query: types.CallbackQuery, state: FSM
         min_temp = day["Temperature"]["Minimum"]["Value"]
         max_temp = day["Temperature"]["Maximum"]["Value"]
         description = day["Day"]["IconPhrase"]
-        wind_speed = day["Day"]["Wind"]["Speed"]["Value"]  # Получаем скорость ветра
+        wind_speed = day["Day"]["Wind"]["Speed"]["Value"]
         precipitation_prob = day["Day"]["PrecipitationProbability"]
 
         forecast_text += f"{date: <10} | {min_temp: <14} | {max_temp: <14} | {wind_speed: <12} | {precipitation_prob: <10} | {description: <8}\n"
@@ -338,6 +349,8 @@ async def process_number_of_days(callback_query: types.CallbackQuery, state: FSM
 
     forecast_text += "</pre>"
 
+    text = f"Для получения подробного и интерактивного прогноза погоды для выбранных городов, пожалуйста, перейдите по <a href='http://127.0.0.1:8050/'>ссылке</a>."
+    await callback_query.message.answer(text, parse_mode=ParseMode.HTML)
     await callback_query.message.answer(forecast_text, parse_mode=ParseMode.HTML)
     await state.clear()
 
